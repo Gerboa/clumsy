@@ -4,17 +4,20 @@
 #include "iup.h"
 #include "windivert.h"
 
-#define CLUMSY_VERSION "0.2"
+#define CLUMSY_VERSION "0.3"
 #define MSG_BUFSIZE 512
 #define FILTER_BUFSIZE 1024
 #define NAME_SIZE 16
-#define MODULE_CNT 6
+#define MODULE_CNT 7
 #define ICON_UPDATE_MS 200
 
 #define CONTROLS_HANDLE "__CONTROLS_HANDLE"
 #define SYNCED_VALUE "__SYNCED_VALUE"
 #define INTEGER_MAX "__INTEGER_MAX"
 #define INTEGER_MIN "__INTEGER_MIN"
+#define FIXED_MAX "__FIXED_MAX"
+#define FIXED_MIN "__FIXED_MIN"
+#define FIXED_EPSILON 0.01
 
 // workaround stupid vs2012 runtime check.
 // it would show even when seeing explicit "(short)(i);"
@@ -46,7 +49,15 @@
 #undef InterlockedIncrement16
 #endif
 #define InterlockedIncrement16(p) (__atomic_add_fetch((short*)(p), 1, __ATOMIC_SEQ_CST))
+
+#ifdef InterlockedDecrement16
+#undef InterlockedDecrement16
 #endif
+#define InterlockedDecrement16(p) (__atomic_sub_fetch((short*)(p), 1, __ATOMIC_SEQ_CST))
+
+#endif
+
+
 
 #ifdef _DEBUG
 #define ABORT() assert(0)
@@ -55,8 +66,14 @@
 #else
 #define LOG(fmt, ...) (printf(__FUNCTION__ ": " fmt "\n", ##__VA_ARGS__))
 #endif
+
+// check for assert
+#ifndef assert
 // some how vs can't trigger debugger on assert, which is really stupid
-//#define assert(x) do {if (!(x)) {DebugBreak();} } while(0)
+#define assert(x) do {if (!(x)) {DebugBreak();} } while(0)
+#endif
+
+
 #else
 #define LOG(fmt, ...)
 #define ABORT()
@@ -85,6 +102,8 @@ short isListEmpty();
 int uiSyncChance(Ihandle *ih);
 int uiSyncToggle(Ihandle *ih, int state);
 int uiSyncInteger(Ihandle *ih);
+int uiSyncFixed(Ihandle *ih);
+
 
 // module
 typedef struct {
@@ -112,6 +131,8 @@ extern Module throttleModule;
 extern Module oodModule;
 extern Module dupModule;
 extern Module tamperModule;
+extern Module resetModule;
+extern Module capModule;
 extern Module* modules[MODULE_CNT]; // all modules in a list
 
 // status for sending packets, 
